@@ -33,6 +33,8 @@ Gemini and I had such a toxic relationship which I couldn't handle. I asked for 
 
 Windsurf was the best companion I could ask for. She helped me write code and even provided me detailed explanations to what she has done. What's so good is that I could revert and changes she made and allow me to review and understand the code Windsurf and I(Really jsut windsurf) created. We had some tough arguments at the end where her suggestions were more like hinderences. It was a great experience to work with Windsurf, however, I'm ready to move on.
 
+My contributions? Oh yes. I wrote the prompts and fixed their bugs :D
+
 ## What I'm proud of
 The premise of the game was just sparks of ideas that appeared slowly which built up to what I have now. Sure, not good but also not bad.
 
