@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Controllable Player with Hit Feedback</title>
+<title>Shape Blaster</title>
 <style>
   body {
     overflow: hidden;
@@ -134,6 +134,15 @@
     background-color: #4a90e2;
     border-radius: 50%;
     pointer-events: none;
+  }
+  .mega-bullet {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background-color: #3498db;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.7));
   }
   .energy-pellet {
     position: absolute;
@@ -395,14 +404,14 @@
   let currentHealth = initialHealth;
   let collectedPellets = 0;
   let cardCount = 0;
-  const maxPellets = 10; // Maximum pellets reduced to 10
+  const maxPellets = 10;
   const damagePerHit = 10;
   const moveSpeed = 5;
   let playerX = 0;
   let playerY = 0;
-  const bulletSpeed = 10;
-  const pelletSpeed = 5;
-  const pelletAttractionRange = 150; // Distance at which pellets start moving to player
+  const bulletSpeed = 6;
+  const pelletSpeed = 3;
+  const pelletAttractionRange = 150;
   const bullets = [];
   const enemyBullets = [];
   const energyPellets = [];
@@ -410,67 +419,78 @@
   const turretBullets = [];
   const turretConnections = [];
   const healthPacks = [];
-  const turretRange = 320; // Turret shooting range
-  const turretFireRate = 1000; // Base fire rate: 1 shot per second
-  const turretSynergyRange = 100; // Range for turrets to boost each other
-  const turretFireRateBoost = 0.7; // 30% faster fire rate per nearby turret
-  const turretBulletSpeed = 8;
+  const turretRange = 320;
+  const turretFireRate = 1000;
+  const turretSynergyRange = 100;
+  const turretFireRateBoost = 0.7;
+  const turretBulletSpeed = 5;
   const maxTurrets = 5;
-  const turretMaxHealth = 40;
-  const turretHealAmount = 5; // Increased heal amount since it's less frequent
-  const turretHealInterval = 2000; // 2 seconds
+  const turretMaxHealth = 100;
+  const turretHealAmount = 10;
+  const turretHealInterval = 2000;
   let lastTurretHealTime = 0;
   const maxAmmo = 6;
   let currentAmmo = maxAmmo;
   let isReloading = false;
-  const enemyShootInterval = 2000; // Pentagon shoots every 2 seconds
+  const enemyShootInterval = 4000;
   const healthPackHealAmount = 15;
-  const healthPackCooldown = 10000; // 10 seconds in milliseconds
+  const healthPackCooldown = 10000;
   let lastHealthPackTime = 0;
   const initialNumEnemies = 3;
   let numEnemies = initialNumEnemies;
-  const triangleSpeed = 2;
-  const pentagonSpeed = 1;
+  const triangleSpeed = 1;
+  const pentagonSpeed = 0.5;
   const maxEnemies = 25;
   let enemyHealthMultiplier = 1;
   let gameStarted = false;
   let mouseX = 0;
   let mouseY = 0;
-  const enemiesPerTurret = 2; // Number of additional enemies per turret
+  let enemies = [];
+  const enemiesPerTurret = 2;
+  const keys = {};
+  const targetedEnemies = new Set();
+  let hasSynergizedTurrets = false;
+  const basePentagonChance = 0.3;
+  const synergizedPentagonChance = 0.6;
+
+  // Add performance variables
+  const maxParticles = 20;
+  const maxBullets = 50;
+  const cleanupInterval = 1000; // Cleanup every second
+  let lastCleanupTime = 0;
+  let particles = [];
 
   function createEnemy() {
-    // Check if we're at max enemies
     if (enemies.length >= maxEnemies) {
-      enemyHealthMultiplier += 0.5; // Increase health multiplier by 50%
+      enemyHealthMultiplier += 0.5;
       return;
     }
 
     const enemy = document.createElement('div');
-    // 70% chance for triangle, 30% chance for pentagon
-    const isPentagon = Math.random() < 0.3;
+    const pentagonChance = hasSynergizedTurrets ? synergizedPentagonChance : basePentagonChance;
+    const isPentagon = Math.random() < pentagonChance;
     enemy.className = isPentagon ? 'enemy-pentagon' : 'enemy';
     if (isPentagon) {
       enemy.setAttribute('data-health', Math.ceil(3 * enemyHealthMultiplier));
     }
     
-    // Random starting position along the edges
     const side = Math.floor(Math.random() * 4);
     let x, y;
     
     switch(side) {
-      case 0: // Top
+      case 0: 
         x = Math.random() * gameContainer.offsetWidth;
         y = -30;
         break;
-      case 1: // Right
+      case 1: 
         x = gameContainer.offsetWidth + 30;
         y = Math.random() * gameContainer.offsetHeight;
         break;
-      case 2: // Bottom
+      case 2: 
         x = Math.random() * gameContainer.offsetWidth;
         y = gameContainer.offsetHeight + 30;
         break;
-      case 3: // Left
+      case 3: 
         x = -30;
         y = Math.random() * gameContainer.offsetHeight;
         break;
@@ -503,6 +523,8 @@
   }
 
   function createEnergyPellet(x, y) {
+    if (energyPellets.length >= maxPellets) return;
+    
     const pellet = document.createElement('div');
     pellet.className = 'energy-pellet';
     pellet.style.left = `${x - 4}px`;
@@ -510,7 +532,6 @@
     gameContainer.appendChild(pellet);
     energyPellets.push(pellet);
 
-    // Remove pellet after 5 seconds
     setTimeout(() => {
       if (energyPellets.includes(pellet)) {
         pellet.remove();
@@ -524,7 +545,6 @@
     const centerX = enemyRect.left + enemyRect.width / 2;
     const centerY = enemyRect.top + enemyRect.height / 2;
     
-    // Drop a white pellet
     createEnergyPellet(centerX, centerY);
     
     const index = enemies.indexOf(enemy);
@@ -570,24 +590,22 @@
     gameContainer.appendChild(bullet);
 
     const angle = Math.atan2(targetY - enemyCenterY, targetX - enemyCenterX);
-    bullet.velocityX = Math.cos(angle) * (bulletSpeed * 0.7); // Slightly slower than player bullets
+    bullet.velocityX = Math.cos(angle) * (bulletSpeed * 0.7);
     bullet.velocityY = Math.sin(angle) * (bulletSpeed * 0.7);
 
     enemyBullets.push(bullet);
   }
 
   function createTurret(x, y) {
-    // Check if we have any energy cards and haven't reached max turrets
     if (cardCount <= 0 || turrets.length >= maxTurrets) return;
 
     const turret = document.createElement('div');
     turret.className = 'turret';
-    turret.style.left = `${x - 15}px`; // Center on cursor
+    turret.style.left = `${x - 15}px`;
     turret.style.top = `${y - 15}px`;
-    turret.lastShot = 0; // Track last shot time
-    turret.health = turretMaxHealth; // Add health to turret
+    turret.lastShot = 0;
+    turret.health = turretMaxHealth;
 
-    // Add health bar for turret
     const healthBar = document.createElement('div');
     healthBar.className = 'health-bar';
     healthBar.style.position = 'absolute';
@@ -606,7 +624,6 @@
     healthBar.appendChild(healthFill);
     turret.appendChild(healthBar);
 
-    // Add range indicator with improved visibility
     const rangeIndicator = document.createElement('div');
     rangeIndicator.style.position = 'absolute';
     rangeIndicator.style.width = `${turretRange * 2}px`;
@@ -621,15 +638,12 @@
     gameContainer.appendChild(turret);
     turrets.push(turret);
 
-    // Increase number of enemies
     numEnemies += enemiesPerTurret;
     
-    // Create new enemies immediately
     for (let i = 0; i < enemiesPerTurret; i++) {
       createEnemy();
     }
 
-    // Remove the last energy card
     const cards = cardsContainer.children;
     if (cards.length > 0) {
       const lastCard = cards[cards.length - 1];
@@ -647,12 +661,8 @@
     const targetX = enemyRect.left + enemyRect.width / 2;
     const targetY = enemyRect.top + enemyRect.height / 2;
 
-    // Calculate angle to enemy
     const angle = Math.atan2(targetY - startY, targetX - startX);
     
-    // Rotate turret barrel
-    turret.style.transform = `rotate(${angle}rad)`;
-
     const bullet = document.createElement('div');
     bullet.className = 'turret-bullet';
     bullet.style.left = `${startX}px`;
@@ -670,11 +680,9 @@
       const bulletY = parseFloat(bullet.style.top);
       const bulletRect = bullet.getBoundingClientRect();
 
-      // Move bullet
       bullet.style.left = `${bulletX + bullet.velocityX}px`;
       bullet.style.top = `${bulletY + bullet.velocityY}px`;
 
-      // Check for collisions with enemies
       for (let j = enemies.length - 1; j >= 0; j--) {
         const enemy = enemies[j];
         const enemyRect = enemy.getBoundingClientRect();
@@ -704,7 +712,6 @@
         }
       }
 
-      // Remove bullets that are off screen
       if (
         parseFloat(bullet.style.left) < 0 ||
         parseFloat(bullet.style.left) > gameContainer.offsetWidth ||
@@ -724,12 +731,10 @@
       const oldX = bulletRect.left;
       const oldY = bulletRect.top;
       
-      // Move bullet
       bullet.style.left = `${bulletRect.left + bullet.velocityX}px`;
       bullet.style.top = `${bulletRect.top + bullet.velocityY}px`;
       const newBulletRect = bullet.getBoundingClientRect();
       
-      // Check collision with player
       const playerRect = player.getBoundingClientRect();
       if (checkCollision(newBulletRect, playerRect)) {
         bullet.remove();
@@ -738,7 +743,6 @@
         continue;
       }
 
-      // Check collision with turret connections
       let hitConnection = false;
       for (const connection of turretConnections) {
         const connRect = connection.getBoundingClientRect();
@@ -753,7 +757,6 @@
           enemyBullets.splice(i, 1);
           hitConnection = true;
           
-          // Create a small particle effect
           const particleCount = 3;
           for (let j = 0; j < particleCount; j++) {
             const particle = document.createElement('div');
@@ -763,7 +766,6 @@
             particle.style.backgroundColor = '#4a90e2';
             gameContainer.appendChild(particle);
             
-            // Remove particle after animation
             setTimeout(() => particle.remove(), 300);
           }
           break;
@@ -771,8 +773,6 @@
       }
       if (hitConnection) continue;
 
-      // Check collision with turrets
-      let hitTurret = false;
       for (let j = turrets.length - 1; j >= 0; j--) {
         const turret = turrets[j];
         const turretRect = turret.getBoundingClientRect();
@@ -790,13 +790,10 @@
             turrets.splice(j, 1);
           }
           
-          hitTurret = true;
           break;
         }
       }
-      if (hitTurret) continue;
 
-      // Remove bullet if it's out of bounds
       if (
         newBulletRect.left < 0 ||
         newBulletRect.right > gameContainer.offsetWidth ||
@@ -816,11 +813,9 @@
       const bulletY = parseFloat(bullet.style.top);
       const bulletRect = bullet.getBoundingClientRect();
 
-      // Move bullet
       bullet.style.left = `${bulletX + bullet.velocityX}px`;
       bullet.style.top = `${bulletY + bullet.velocityY}px`;
 
-      // Check for collisions with enemies
       for (let j = enemies.length - 1; j >= 0; j--) {
         const enemy = enemies[j];
         const enemyRect = enemy.getBoundingClientRect();
@@ -850,7 +845,6 @@
         }
       }
 
-      // Remove bullets that are off screen
       if (
         bulletX < 0 ||
         bulletX > gameContainer.offsetWidth ||
@@ -864,15 +858,15 @@
   }
 
   function updatePlayerPosition() {
-    if (keys['w'] || keys['ArrowUp']) playerY = Math.max(0, playerY - 5);
-    if (keys['s'] || keys['ArrowDown']) playerY = Math.min(gameContainer.offsetHeight - player.offsetHeight, playerY + 5);
-    if (keys['a'] || keys['ArrowLeft']) playerX = Math.max(0, playerX - 5);
-    if (keys['d'] || keys['ArrowRight']) playerX = Math.min(gameContainer.offsetWidth - player.offsetWidth, playerX + 5);
+    const playerSpeed = 3;
+    if (keys['w'] || keys['ArrowUp']) playerY = Math.max(0, playerY - playerSpeed);
+    if (keys['s'] || keys['ArrowDown']) playerY = Math.min(gameContainer.offsetHeight - player.offsetHeight, playerY + playerSpeed);
+    if (keys['a'] || keys['ArrowLeft']) playerX = Math.max(0, playerX - playerSpeed);
+    if (keys['d'] || keys['ArrowRight']) playerX = Math.min(gameContainer.offsetWidth - player.offsetWidth, playerX + playerSpeed);
 
     player.style.left = `${playerX}px`;
     player.style.top = `${playerY}px`;
 
-    // Update reload indicator position when player moves
     if (isReloading) {
       const reloadIndicator = document.getElementById('reload-indicator');
       reloadIndicator.style.left = `${playerX}px`;
@@ -896,7 +890,6 @@
       enemy.style.left = `${enemyX + Math.cos(angle) * speed}px`;
       enemy.style.top = `${enemyY + Math.sin(angle) * speed}px`;
 
-      // Make pentagons shoot at player
       if (enemy.classList.contains('enemy-pentagon')) {
         if (!enemy.lastShot || Date.now() - enemy.lastShot >= enemyShootInterval) {
           createEnemyBullet(enemy, playerRect.left + playerRect.width / 2, playerRect.top + playerRect.height / 2);
@@ -923,14 +916,11 @@
       const pelletX = pelletRect.left + pelletRect.width / 2;
       const pelletY = pelletRect.top + pelletRect.height / 2;
 
-      // Calculate distance to player
       const dx = playerRect.left + playerRect.width / 2 - pelletX;
       const dy = playerRect.top + playerRect.height / 2 - pelletY;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Check for collection
-      if (distance < 20) { // Collection radius
-        // Only collect if not at max
+      if (distance < 20) {
         if (collectedPellets < maxPellets) {
           collectedPellets++;
           updateEnergyBar();
@@ -940,7 +930,6 @@
         continue;
       }
 
-      // Move towards player if within attraction range
       if (distance < pelletAttractionRange) {
         const angle = Math.atan2(dy, dx);
         const speed = pelletSpeed * (1 - distance / pelletAttractionRange);
@@ -956,17 +945,23 @@
 
   function updateTurrets() {
     const currentTime = Date.now();
+    targetedEnemies.clear(); // Clear targeted enemies at the start of each update
     
-    turrets.forEach(turret => {
+    // Sort turrets by health to prioritize healthier turrets
+    const sortedTurrets = [...turrets].sort((a, b) => b.health - a.health);
+    
+    sortedTurrets.forEach(turret => {
       const turretRect = turret.getBoundingClientRect();
       const turretX = turretRect.left + turretRect.width / 2;
       const turretY = turretRect.top + turretRect.height / 2;
 
-      // Find closest enemy in range
       let closestEnemy = null;
       let closestDistance = turretRange;
 
+      // Find closest non-targeted enemy
       enemies.forEach(enemy => {
+        if (targetedEnemies.has(enemy)) return; // Skip already targeted enemies
+        
         const enemyRect = enemy.getBoundingClientRect();
         const enemyX = enemyRect.left + enemyRect.width / 2;
         const enemyY = enemyRect.top + enemyRect.height / 2;
@@ -981,11 +976,10 @@
         }
       });
 
-      // Get boosted fire rate based on nearby turrets
       const currentFireRate = getTurretFireRate(turret);
 
-      // Shoot at closest enemy if enough time has passed
       if (closestEnemy && currentTime - turret.lastShot >= currentFireRate) {
+        targetedEnemies.add(closestEnemy); // Mark enemy as targeted
         createTurretBullet(turret, closestEnemy);
         turret.lastShot = currentTime;
       }
@@ -999,49 +993,76 @@
     turretConnections.forEach(conn => conn.remove());
     turretConnections.length = 0;
 
-    // Find synergized turret groups
+    // Find synergized turret groups more efficiently
     const synergizedGroups = [];
-    turrets.forEach((turret1, i) => {
+    const processed = new Set();
+
+    turrets.forEach((turret1) => {
+      if (processed.has(turret1)) return;
+      
       const group = new Set([turret1]);
       const t1Rect = turret1.getBoundingClientRect();
       const t1X = t1Rect.left + t1Rect.width/2;
       const t1Y = t1Rect.top + t1Rect.height/2;
       
-      turrets.forEach((turret2, j) => {
-        if (i !== j) {
+      turrets.forEach((turret2) => {
+        if (turret1 === turret2 || processed.has(turret2)) return;
+        
+        const t2Rect = turret2.getBoundingClientRect();
+        const t2X = t2Rect.left + t2Rect.width/2;
+        const t2Y = t2Rect.top + t2Rect.height/2;
+        
+        const dx = t2X - t1X;
+        const dy = t2Y - t1Y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance <= turretSynergyRange) {
+          group.add(turret2);
+        }
+      });
+      
+      if (group.size >= 3) {
+        synergizedGroups.push(Array.from(group));
+        group.forEach(t => processed.add(t));
+      }
+    });
+
+    // Update synergy status
+    hasSynergizedTurrets = synergizedGroups.length > 0;
+
+    // Process each synergized group
+    synergizedGroups.forEach(turretArray => {
+      // Create connections only once per pair
+      for (let i = 0; i < turretArray.length; i++) {
+        const turret1 = turretArray[i];
+        const t1Rect = turret1.getBoundingClientRect();
+        const t1X = t1Rect.left + t1Rect.width/2;
+        const t1Y = t1Rect.top + t1Rect.height/2;
+        
+        for (let j = i + 1; j < turretArray.length; j++) {
+          const turret2 = turretArray[j];
           const t2Rect = turret2.getBoundingClientRect();
           const t2X = t2Rect.left + t2Rect.width/2;
           const t2Y = t2Rect.top + t2Rect.height/2;
           
-          const dx = t2X - t1X;
-          const dy = t2Y - t1Y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
+          const connection = document.createElement('div');
+          connection.className = 'turret-connection';
+          const distance = Math.sqrt(Math.pow(t2X - t1X, 2) + Math.pow(t2Y - t1Y, 2));
+          connection.style.width = `${distance}px`;
           
-          if (distance <= turretSynergyRange) {
-            group.add(turret2);
-            
-            // Create connection line
-            const connection = document.createElement('div');
-            connection.className = 'turret-connection';
-            connection.style.width = `${distance}px`;
-            connection.style.left = `${t1X}px`;
-            connection.style.top = `${t1Y}px`;
-            connection.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
-            gameContainer.appendChild(connection);
-            turretConnections.push(connection);
-          }
+          const angle = Math.atan2(t2Y - t1Y, t2X - t1X);
+          connection.style.transform = `rotate(${angle}rad)`;
+          connection.style.left = `${t1X}px`;
+          connection.style.top = `${t1Y}px`;
+          
+          gameContainer.appendChild(connection);
+          turretConnections.push(connection);
         }
-      });
-      
-      if (group.size === 3) { // Only create groups of exactly 3
-        synergizedGroups.push(Array.from(group));
       }
-    });
-
-    // Heal turrets in synergized groups every 2 seconds
-    if (currentTime - lastTurretHealTime >= turretHealInterval) {
-      synergizedGroups.forEach(group => {
-        group.forEach(turret => {
+      
+      // Heal synergized turrets
+      if (currentTime - lastTurretHealTime >= turretHealInterval) {
+        turretArray.forEach(turret => {
           if (turret.health < turretMaxHealth) {
             turret.health = Math.min(turretMaxHealth, turret.health + turretHealAmount);
             const healthFill = turret.querySelector('.health-fill');
@@ -1049,9 +1070,45 @@
             healthFill.style.width = `${healthPercentage}%`;
           }
         });
-      });
-      lastTurretHealTime = currentTime;
-    }
+        lastTurretHealTime = currentTime;
+      }
+      
+      // Spawn health pack at center of group
+      if (currentTime - lastHealthPackTime >= healthPackCooldown) {
+        const centerX = turretArray.reduce((sum, t) => {
+          const rect = t.getBoundingClientRect();
+          return sum + rect.left + rect.width/2;
+        }, 0) / turretArray.length;
+        
+        const centerY = turretArray.reduce((sum, t) => {
+          const rect = t.getBoundingClientRect();
+          return sum + rect.top + rect.height/2;
+        }, 0) / turretArray.length;
+        
+        spawnHealthPack(centerX, centerY);
+        lastHealthPackTime = currentTime;
+      }
+    });
+  }
+
+  function spawnHealthPack(x, y) {
+    if (currentHealth >= initialHealth) return;
+    
+    const pack = document.createElement('div');
+    pack.className = 'health-pack';
+    
+    pack.style.left = `${x - 10}px`;
+    pack.style.top = `${y - 10}px`;
+    
+    gameContainer.appendChild(pack);
+    healthPacks.push(pack);
+    
+    setTimeout(() => {
+      if (healthPacks.includes(pack)) {
+        pack.remove();
+        healthPacks.splice(healthPacks.indexOf(pack), 1);
+      }
+    }, 10000);
   }
 
   function checkHealthPackCollection() {
@@ -1076,7 +1133,6 @@
     const turretY = turretRect.top + turretRect.height / 2;
     let nearbyTurrets = 0;
 
-    // Check for nearby turrets
     turrets.forEach(otherTurret => {
       if (otherTurret !== turret) {
         const otherRect = otherTurret.getBoundingClientRect();
@@ -1093,8 +1149,7 @@
       }
     });
 
-    // Cap synergy at 3 turrets (including this one)
-    nearbyTurrets = Math.min(nearbyTurrets, 2); // Cap at 2 nearby turrets (3 total with current turret)
+    nearbyTurrets = Math.min(nearbyTurrets, 2);
     const fireRateMultiplier = Math.pow(turretFireRateBoost, nearbyTurrets);
     return turretFireRate * fireRateMultiplier;
   }
@@ -1110,7 +1165,6 @@
   function updateEnergyBar() {
     energyBar.style.width = `${(collectedPellets / maxPellets) * 100}%`;
     
-    // When energy bar is full
     if (collectedPellets >= maxPellets) {
       createEnergyCard();
       collectedPellets = 0;
@@ -1119,12 +1173,11 @@
   }
 
   function checkCollision(rect1, rect2) {
-    return (
-      rect1.left < rect2.right &&
-      rect1.right > rect2.left &&
-      rect1.top < rect2.bottom &&
-      rect1.bottom > rect2.top
-    );
+    // Cache the values to avoid repeated property access
+    const l1 = rect1.left, r1 = rect1.right, t1 = rect1.top, b1 = rect1.bottom;
+    const l2 = rect2.left, r2 = rect2.right, t2 = rect2.top, b2 = rect2.bottom;
+    
+    return l1 < r2 && r1 > l2 && t1 < b2 && b1 > t2;
   }
 
   function reduceHealth() {
@@ -1141,7 +1194,7 @@
   function updateHealthBar() {
     const healthPercentage = (currentHealth / initialHealth) * 100;
     healthBar.style.width = `${healthPercentage}%`;
-    healthBar.className = ''; // Reset class
+    healthBar.className = '';
     if (healthPercentage < 30) {
       healthBar.classList.add('critical');
     } else if (healthPercentage < 60) {
@@ -1170,28 +1223,90 @@
     }
   }
 
-  function gameLoop() {
+  function updateGame() {
     if (!gameStarted) return;
+    
+    const currentTime = Date.now();
+    
+    // Periodic cleanup of game objects
+    if (currentTime - lastCleanupTime > cleanupInterval) {
+      cleanupOffscreenObjects();
+      lastCleanupTime = currentTime;
+    }
+    
     updatePlayerPosition();
     updateEnemyPositions();
     updateBullets();
-    updateEnemyBullets();
     updateTurretBullets();
+    updateEnemyBullets();
     updateEnergyPellets();
     updateTurrets();
     updateTurretConnections();
     checkHealthPackCollection();
-    requestAnimationFrame(gameLoop);
+    
+    requestAnimationFrame(updateGame);
+  }
+
+  function cleanupOffscreenObjects() {
+    // Cleanup bullets that exceed the limit
+    while (bullets.length > maxBullets) {
+      const bullet = bullets.shift();
+      bullet.remove();
+    }
+    while (enemyBullets.length > maxBullets) {
+      const bullet = enemyBullets.shift();
+      bullet.remove();
+    }
+    while (turretBullets.length > maxBullets) {
+      const bullet = turretBullets.shift();
+      bullet.remove();
+    }
+    
+    // Cleanup particles
+    while (particles.length > maxParticles) {
+      const particle = particles.shift();
+      particle.remove();
+    }
+    
+    // Remove offscreen energy pellets
+    energyPellets.forEach((pellet, index) => {
+      const rect = pellet.getBoundingClientRect();
+      if (rect.right < 0 || rect.left > gameContainer.offsetWidth ||
+          rect.bottom < 0 || rect.top > gameContainer.offsetHeight) {
+        pellet.remove();
+        energyPellets.splice(index, 1);
+      }
+    });
+  }
+
+  function createParticle(x, y, color) {
+    if (particles.length >= maxParticles) return;
+    
+    const particle = document.createElement('div');
+    particle.className = 'particle';
+    particle.style.left = `${x}px`;
+    particle.style.top = `${y}px`;
+    particle.style.backgroundColor = color || '#4a90e2';
+    gameContainer.appendChild(particle);
+    particles.push(particle);
+    
+    setTimeout(() => {
+      if (particles.includes(particle)) {
+        const index = particles.indexOf(particle);
+        if (index > -1) {
+          particles.splice(index, 1);
+        }
+        particle.remove();
+      }
+    }, 300);
   }
 
   function lineIntersectsRect(x1, y1, x2, y2, rect) {
-    // Check if line intersects with rectangle using line segment intersection
     const left = rect.left;
     const right = rect.right;
     const top = rect.top;
     const bottom = rect.bottom;
 
-    // Check each edge of the rectangle
     if (lineIntersectsLine(x1, y1, x2, y2, left, top, right, top) ||    // Top edge
         lineIntersectsLine(x1, y1, x2, y2, right, top, right, bottom) || // Right edge
         lineIntersectsLine(x1, y1, x2, y2, left, bottom, right, bottom) ||  // Bottom edge
@@ -1202,15 +1317,12 @@
   }
 
   function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
-    // Calculate denominator
     const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     if (den === 0) return false;
 
-    // Calculate intersection point
     const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
     const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
 
-    // Check if intersection point lies on both line segments
     return t >= 0 && t <= 1 && u >= 0 && u <= 1;
   }
 
@@ -1242,7 +1354,7 @@
   gameContainer.addEventListener('mousedown', (e) => {
     if (!gameStarted) return;
     
-    if (e.button === 2) { // Right click
+    if (e.button === 2) {
       if (cardCount > 0) {
         const rect = gameContainer.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -1279,7 +1391,7 @@
       createEnemy();
     }
 
-    gameLoop();
+    updateGame();
   });
 
   window.addEventListener('resize', () => {
