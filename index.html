@@ -357,64 +357,12 @@
       opacity: 0;
     }
   }
-  .rules-box {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 400px;
-    background-color: rgba(0, 0, 0, 0.8);
-    border: 2px solid #4a90e2;
-    border-radius: 10px;
-    padding: 20px;
-    color: white;
-    font-family: Arial, sans-serif;
-    text-align: left;
-    display: none;
-  }
-
-  .rules-box h2 {
-    color: #4a90e2;
-    text-align: center;
-    margin-bottom: 15px;
-  }
-
-  .rules-box ul {
-    list-style-type: none;
-    padding: 0;
-  }
-
-  .rules-box li {
-    margin-bottom: 10px;
-    line-height: 1.4;
-  }
-
-  .rules-box li::before {
-    content: "•";
-    color: #4a90e2;
-    font-weight: bold;
-    margin-right: 8px;
-  }
 </style>
 </head>
 <body>
 
 <div id="title-screen">
   <div id="title">Enemy Chase</div>
-  <div class="rules-box" id="rules-box">
-    <h2>Game Rules</h2>
-    <ul>
-      <li>Move with WASD keys and aim/shoot with mouse</li>
-      <li>Collect energy pellets to build turrets (max 5)</li>
-      <li>Place 3 turrets close together for synergy effects:</li>
-      <li>- Turrets heal every 2 seconds</li>
-      <li>- Synergy links block enemy bullets</li>
-      <li>- Increased fire rate for connected turrets</li>
-      <li>Turrets have 40 health and take damage from enemy bullets</li>
-      <li>Enemies get stronger when max count (25) is reached</li>
-      <li>Triangles are fast, Pentagons are tough and shoot</li>
-    </ul>
-  </div>
   <button id="start-button">Start Game</button>
 </div>
 
@@ -1305,10 +1253,8 @@
   });
 
   startButton.addEventListener('click', () => {
-    const titleScreen = document.getElementById('title-screen');
-    const rulesBox = document.getElementById('rules-box');
     titleScreen.style.display = 'none';
-    rulesBox.style.display = 'none';
+    gameContainer.style.display = 'block';
     gameStarted = true;
     playerX = gameContainer.offsetWidth / 2 - 16;
     playerY = gameContainer.offsetHeight / 2 - 16;
