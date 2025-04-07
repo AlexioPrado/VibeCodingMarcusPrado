@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Controllable Player with Hit Feedback</title>
+<style>
+  body {
+    overflow: hidden;
+    margin: 0;
+    background-color: #333; /* Darker background */
+    font-family: 'Arial', sans-serif;
+    cursor: crosshair;
+    color: #eee; /* Light text */
+  }
+  #title-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    z-index: 10;
+  }
+  #title {
+    font-size: 4em;
+    margin-bottom: 30px;
+    text-shadow: 2px 2px #000;
+  }
+  #start-button {
+    padding: 15px 40px;
+    font-size: 1.8em;
+    background-color: #4CAF50;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  #start-button:hover {
+    background-color: #45a049;
+  }
+  #game-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #player {
+    position: absolute;
+    background-color: #007bff; /* Blue player */
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 2px solid #0056b3;
+    transform-origin: center;
+  }
+  .enemy {
+    position: absolute;
+    width: 0;
+    height: 0;
+    border-left: 15px solid transparent;
+    border-right: 15px solid transparent;
+    border-bottom: 26px solid #ff4d5e;
+    transform-origin: center;
+    transition: opacity 0.3s ease-out;
+    filter: drop-shadow(0 0 2px rgba(255, 77, 94, 0.5));
+    animation: enemySpin 2s linear infinite;
+  }
+  .enemy-pentagon {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+    background-color: #ff8c00;
+    transform-origin: center;
+    transition: all 0.3s ease-out;
+    filter: drop-shadow(0 0 2px rgba(255, 140, 0, 0.5));
+    animation: enemySpin 2s linear infinite;
+  }
+  .enemy-pentagon[data-health="2"] {
+    background-color: #ffa333;
+  }
+  .enemy-pentagon[data-health="1"] {
+    background-color: #ffba66;
+  }
+  @keyframes enemySpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .explosion {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    background-color: #ffc107; /* Yellow explosion */
+    border-radius: 50%;
+    opacity: 0.9;
+    animation: explode 0.5s ease-out forwards;
+    border: 2px solid #e0a800;
+  }
+  @keyframes explode {
+    0% {
+      transform: scale(1);
+      opacity: 0.9;
+    }
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+    }
+  }
+  .bullet {
+    position: absolute;
+    background-color: #fff; /* White bullet */
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .enemy-bullet {
+    position: absolute;
+    background-color: #ffa333; /* Orange bullet */
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    filter: drop-shadow(0 0 2px rgba(255, 140, 0, 0.3));
+  }
+  .turret-bullet {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background-color: #4a90e2;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .energy-pellet {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: white;
+    border-radius: 50%;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7));
+  }
+  #ui-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+  }
+  #energy-container {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 20px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 2px solid #fff;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  #energy-bar {
+    height: 100%;
+    width: 0%;
+    background-color: white;
+    transition: width 0.3s ease;
+  }
+  #health-bar-container {
+    background-color: #6c757d; /* Dark gray background */
+    border-radius: 5px;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+  }
+  #health-bar {
+    background-color: #28a745; /* Green health */
+    height: 12px;
+    width: 100%;
+    border-radius: 3px;
+    transition: background-color 0.3s ease;
+  }
+  #health-bar.low {
+    background-color: #ffc107; /* Yellow low health */
+  }
+  #health-bar.critical {
+    background-color: #dc3545; /* Red critical health */
+  }
+  #ammo-count {
+    font-size: 0.9em;
+    color: #f8f9fa;
+    text-shadow: 1px 1px #000;
+  }
+  .hit-marker {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.8); /* White flash */
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: hit-fade 0.3s ease-out forwards;
+    pointer-events: none; /* Don't interfere with clicks */
+  }
+  @keyframes hit-fade {
+    0% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+    }
+  }
+  .reload-indicator {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border: 7px solid #4CAF50;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+    pointer-events: none;
+    display: none;
+    transform: translate(-10px, -10px);
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  #cards-container {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    gap: 10px;
+  }
+  .energy-card {
+    width: 70px;
+    height: 110px;
+    background-color: #4a90e2;
+    border: 3px solid #2c3e50;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    position: relative;
+  }
+  .energy-card::before {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm1-13h-2v6h-2l3 3 3-3h-2z'/%3E%3Crect x='11' y='4' width='2' height='8' fill='white'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  .energy-card::after {
+    content: attr(data-number);
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    font-size: 14px;
+    color: white;
+    font-weight: bold;
+  }
+  .turret {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    background-color: #4a90e2;
+    border: 2px solid #2c3e50;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .turret::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 6px;
+    background-color: #2c3e50;
+    top: 12px;
+    left: 28px;
+    transform-origin: left center;
+  }
+  .turret::before {
+    content: '';
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border: 2px dotted rgba(74, 144, 226, 0.5); /* Made more visible */
+    border-radius: 50%;
+    left: -185px;
+    top: -185px;
+    pointer-events: none;
+  }
+  .turret-connection {
+    position: absolute;
+    height: 2px;
+    background-color: rgba(46, 204, 113, 0.6);
+    transform-origin: left center;
+    pointer-events: none;
+  }
+  .health-pack {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background-color: #27ae60;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: pulse 1.5s infinite;
+  }
+  .health-pack::after {
+    content: '+';
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+  .health-bar {
+    position: absolute;
+    width: 30px;
+    height: 4px;
+    background-color: #333;
+    bottom: -8px;
+    left: 0;
+  }
+  .health-fill {
+    width: 100%;
+    height: 100%;
+    background-color: #2ecc71;
+    transition: width 0.2s;
+  }
+  .particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: particleAnim 0.3s ease-out forwards;
+  }
+
+  @keyframes particleAnim {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--dx, 10px), var(--dy, 10px)) scale(0);
+      opacity: 0;
+    }
+  }
+  .rules-box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border: 2px solid #4a90e2;
+    border-radius: 10px;
+    padding: 20px;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: left;
+    display: none;
+  }
+
+  .rules-box h2 {
+    color: #4a90e2;
+    text-align: center;
+    margin-bottom: 15px;
+  }
+
+  .rules-box ul {
+    list-style-type: none;
+    padding: 0;
+  }
+
+  .rules-box li {
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+
+  .rules-box li::before {
+    content: "•";
+    color: #4a90e2;
+    font-weight: bold;
+    margin-right: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div id="title-screen">
+  <div id="title">Enemy Chase</div>
+  <div class="rules-box" id="rules-box">
+    <h2>Game Rules</h2>
+    <ul>
+      <li>Move with WASD keys and aim/shoot with mouse</li>
+      <li>Collect energy pellets to build turrets (max 5)</li>
+      <li>Place 3 turrets close together for synergy effects:</li>
+      <li>- Turrets heal every 2 seconds</li>
+      <li>- Synergy links block enemy bullets</li>
+      <li>- Increased fire rate for connected turrets</li>
+      <li>Turrets have 40 health and take damage from enemy bullets</li>
+      <li>Enemies get stronger when max count (25) is reached</li>
+      <li>Triangles are fast, Pentagons are tough and shoot</li>
+    </ul>
+  </div>
+  <button id="start-button">Start Game</button>
+</div>
+
+<div id="game-container" style="display: none;">
+  <div id="ui-container">
+    <div id="health-bar-container">
+      <div id="health-bar"></div>
+      <div id="ammo-count">Ammo: 6</div>
+    </div>
+  </div>
+  <div id="energy-container">
+    <div id="energy-bar"></div>
+  </div>
+  <div id="cards-container"></div>
+  <div id="player"></div>
+  <div id="reload-indicator" class="reload-indicator"></div>
+</div>
+
+<script>
+  const titleScreen = document.getElementById('title-screen');
+  const gameContainer = document.getElementById('game-container');
+  const startButton = document.getElementById('start-button');
+  const player = document.getElementById('player');
+  const healthBar = document.getElementById('health-bar');
+  const energyBar = document.getElementById('energy-bar');
+  const cardsContainer = document.getElementById('cards-container');
+  const ammoCountDisplay = document.getElementById('ammo-count');
+  const uiContainer = document.getElementById('ui-container');
+  const initialHealth = 100;
+  let currentHealth = initialHealth;
+  let collectedPellets = 0;
+  let cardCount = 0;
+  const maxPellets = 10; // Maximum pellets reduced to 10
+  const damagePerHit = 10;
+  const moveSpeed = 5;
+  let playerX = 0;
+  let playerY = 0;
+  const bulletSpeed = 10;
+  const pelletSpeed = 5;
+  const pelletAttractionRange = 150; // Distance at which pellets start moving to player
+  const bullets = [];
+  const enemyBullets = [];
+  const energyPellets = [];
+  const turrets = [];
+  const turretBullets = [];
+  const turretConnections = [];
+  const healthPacks = [];
+  const turretRange = 320; // Turret shooting range
+  const turretFireRate = 1000; // Base fire rate: 1 shot per second
+  const turretSynergyRange = 100; // Range for turrets to boost each other
+  const turretFireRateBoost = 0.7; // 30% faster fire rate per nearby turret
+  const turretBulletSpeed = 8;
+  const maxTurrets = 5;
+  const turretMaxHealth = 40;
+  const turretHealAmount = 5; // Increased heal amount since it's less frequent
+  const turretHealInterval = 2000; // 2 seconds
+  let lastTurretHealTime = 0;
+  const maxAmmo = 6;
+  let currentAmmo = maxAmmo;
+  let isReloading = false;
+  const enemyShootInterval = 2000; // Pentagon shoots every 2 seconds
+  const healthPackHealAmount = 15;
+  const healthPackCooldown = 10000; // 10 seconds in milliseconds
+  let lastHealthPackTime = 0;
+  const initialNumEnemies = 3;
+  let numEnemies = initialNumEnemies;
+  const triangleSpeed = 2;
+  const pentagonSpeed = 1;
+  const maxEnemies = 25;
+  let enemyHealthMultiplier = 1;
+  let gameStarted = false;
+  let mouseX = 0;
+  let mouseY = 0;
+  const enemiesPerTurret = 2; // Number of additional enemies per turret
+
+  function createEnemy() {
+    // Check if we're at max enemies
+    if (enemies.length >= maxEnemies) {
+      enemyHealthMultiplier += 0.5; // Increase health multiplier by 50%
+      return;
+    }
+
+    const enemy = document.createElement('div');
+    // 70% chance for triangle, 30% chance for pentagon
+    const isPentagon = Math.random() < 0.3;
+    enemy.className = isPentagon ? 'enemy-pentagon' : 'enemy';
+    if (isPentagon) {
+      enemy.setAttribute('data-health', Math.ceil(3 * enemyHealthMultiplier));
+    }
+    
+    // Random starting position along the edges
+    const side = Math.floor(Math.random() * 4);
+    let x, y;
+    
+    switch(side) {
+      case 0: // Top
+        x = Math.random() * gameContainer.offsetWidth;
+        y = -30;
+        break;
+      case 1: // Right
+        x = gameContainer.offsetWidth + 30;
+        y = Math.random() * gameContainer.offsetHeight;
+        break;
+      case 2: // Bottom
+        x = Math.random() * gameContainer.offsetWidth;
+        y = gameContainer.offsetHeight + 30;
+        break;
+      case 3: // Left
+        x = -30;
+        y = Math.random() * gameContainer.offsetHeight;
+        break;
+    }
+    
+    enemy.style.left = `${x}px`;
+    enemy.style.top = `${y}px`;
+    gameContainer.appendChild(enemy);
+    enemies.push(enemy);
+  }
+
+  function createExplosion(x, y) {
+    const explosion = document.createElement('div');
+    explosion.classList.add('explosion');
+    explosion.style.left = `${x - 18}px`;
+    explosion.style.top = `${y - 18}px`;
+    gameContainer.appendChild(explosion);
+
+    explosion.addEventListener('animationend', () => {
+      explosion.remove();
+    });
+  }
+
+  function createHitMarker(x, y) {
+    const hitMarker = document.createElement('div');
+    hitMarker.classList.add('hit-marker');
+    hitMarker.style.left = `${x - 5}px`;
+    hitMarker.style.top = `${y - 5}px`;
+    gameContainer.appendChild(hitMarker);
+  }
+
+  function createEnergyPellet(x, y) {
+    const pellet = document.createElement('div');
+    pellet.className = 'energy-pellet';
+    pellet.style.left = `${x - 4}px`;
+    pellet.style.top = `${y - 4}px`;
+    gameContainer.appendChild(pellet);
+    energyPellets.push(pellet);
+
+    // Remove pellet after 5 seconds
+    setTimeout(() => {
+      if (energyPellets.includes(pellet)) {
+        pellet.remove();
+        energyPellets.splice(energyPellets.indexOf(pellet), 1);
+      }
+    }, 5000);
+  }
+
+  function removeEnemy(enemy) {
+    const enemyRect = enemy.getBoundingClientRect();
+    const centerX = enemyRect.left + enemyRect.width / 2;
+    const centerY = enemyRect.top + enemyRect.height / 2;
+    
+    // Drop a white pellet
+    createEnergyPellet(centerX, centerY);
+    
+    const index = enemies.indexOf(enemy);
+    if (index > -1) {
+      enemies.splice(index, 1);
+      enemy.remove();
+      createEnemy();
+    }
+  }
+
+  function createBullet(x, y, targetX, targetY) {
+    if (gameStarted && !isReloading && currentAmmo > 0) {
+      currentAmmo--;
+      updateAmmoDisplay();
+      const bullet = document.createElement('div');
+      bullet.classList.add('bullet');
+      bullet.style.left = `${x - 3}px`;
+      bullet.style.top = `${y - 3}px`;
+      gameContainer.appendChild(bullet);
+
+      const angle = Math.atan2(targetY - y, targetX - x);
+      bullet.velocityX = Math.cos(angle) * bulletSpeed;
+      bullet.velocityY = Math.sin(angle) * bulletSpeed;
+
+      bullets.push(bullet);
+
+      if (currentAmmo === 0) {
+        startReload();
+      }
+    }
+  }
+
+  function createEnemyBullet(enemy, targetX, targetY) {
+    const bullet = document.createElement('div');
+    bullet.className = 'enemy-bullet';
+    
+    const enemyRect = enemy.getBoundingClientRect();
+    const enemyCenterX = enemyRect.left + enemyRect.width / 2;
+    const enemyCenterY = enemyRect.top + enemyRect.height / 2;
+    
+    bullet.style.left = `${enemyCenterX}px`;
+    bullet.style.top = `${enemyCenterY}px`;
+    gameContainer.appendChild(bullet);
+
+    const angle = Math.atan2(targetY - enemyCenterY, targetX - enemyCenterX);
+    bullet.velocityX = Math.cos(angle) * (bulletSpeed * 0.7); // Slightly slower than player bullets
+    bullet.velocityY = Math.sin(angle) * (bulletSpeed * 0.7);
+
+    enemyBullets.push(bullet);
+  }
+
+  function createTurret(x, y) {
+    // Check if we have any energy cards and haven't reached max turrets
+    if (cardCount <= 0 || turrets.length >= maxTurrets) return;
+
+    const turret = document.createElement('div');
+    turret.className = 'turret';
+    turret.style.left = `${x - 15}px`; // Center on cursor
+    turret.style.top = `${y - 15}px`;
+    turret.lastShot = 0; // Track last shot time
+    turret.health = turretMaxHealth; // Add health to turret
+
+    // Add health bar for turret
+    const healthBar = document.createElement('div');
+    healthBar.className = 'health-bar';
+    healthBar.style.position = 'absolute';
+    healthBar.style.width = '30px';
+    healthBar.style.height = '4px';
+    healthBar.style.backgroundColor = '#333';
+    healthBar.style.bottom = '-8px';
+    healthBar.style.left = '0';
+
+    const healthFill = document.createElement('div');
+    healthFill.className = 'health-fill';
+    healthFill.style.width = '100%';
+    healthFill.style.height = '100%';
+    healthFill.style.backgroundColor = '#2ecc71';
+    healthFill.style.transition = 'width 0.2s';
+    healthBar.appendChild(healthFill);
+    turret.appendChild(healthBar);
+
+    // Add range indicator with improved visibility
+    const rangeIndicator = document.createElement('div');
+    rangeIndicator.style.position = 'absolute';
+    rangeIndicator.style.width = `${turretRange * 2}px`;
+    rangeIndicator.style.height = `${turretRange * 2}px`;
+    rangeIndicator.style.border = '2px dotted rgba(74, 144, 226, 0.5)';
+    rangeIndicator.style.borderRadius = '50%';
+    rangeIndicator.style.left = `${-turretRange + 15}px`;
+    rangeIndicator.style.top = `${-turretRange + 15}px`;
+    rangeIndicator.style.pointerEvents = 'none';
+    turret.appendChild(rangeIndicator);
+
+    gameContainer.appendChild(turret);
+    turrets.push(turret);
+
+    // Increase number of enemies
+    numEnemies += enemiesPerTurret;
+    
+    // Create new enemies immediately
+    for (let i = 0; i < enemiesPerTurret; i++) {
+      createEnemy();
+    }
+
+    // Remove the last energy card
+    const cards = cardsContainer.children;
+    if (cards.length > 0) {
+      const lastCard = cards[cards.length - 1];
+      lastCard.remove();
+      cardCount--;
+    }
+  }
+
+  function createTurretBullet(turret, enemy) {
+    const turretRect = turret.getBoundingClientRect();
+    const enemyRect = enemy.getBoundingClientRect();
+    
+    const startX = turretRect.left + turretRect.width / 2;
+    const startY = turretRect.top + turretRect.height / 2;
+    const targetX = enemyRect.left + enemyRect.width / 2;
+    const targetY = enemyRect.top + enemyRect.height / 2;
+
+    // Calculate angle to enemy
+    const angle = Math.atan2(targetY - startY, targetX - startX);
+    
+    // Rotate turret barrel
+    turret.style.transform = `rotate(${angle}rad)`;
+
+    const bullet = document.createElement('div');
+    bullet.className = 'turret-bullet';
+    bullet.style.left = `${startX}px`;
+    bullet.style.top = `${startY}px`;
+    bullet.velocityX = Math.cos(angle) * turretBulletSpeed;
+    bullet.velocityY = Math.sin(angle) * turretBulletSpeed;
+    gameContainer.appendChild(bullet);
+    turretBullets.push(bullet);
+  }
+
+  function updateBullets() {
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const bullet = bullets[i];
+      const bulletX = parseFloat(bullet.style.left);
+      const bulletY = parseFloat(bullet.style.top);
+      const bulletRect = bullet.getBoundingClientRect();
+
+      // Move bullet
+      bullet.style.left = `${bulletX + bullet.velocityX}px`;
+      bullet.style.top = `${bulletY + bullet.velocityY}px`;
+
+      // Check for collisions with enemies
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const enemy = enemies[j];
+        const enemyRect = enemy.getBoundingClientRect();
+
+        if (checkCollision(bulletRect, enemyRect)) {
+          const enemyCenterX = enemyRect.left + enemyRect.width / 2;
+          const enemyCenterY = enemyRect.top + enemyRect.height / 2;
+          createHitMarker(enemyCenterX, enemyCenterY);
+
+          if (enemy.classList.contains('enemy-pentagon')) {
+            const health = parseInt(enemy.getAttribute('data-health')) - 1;
+            if (health > 0) {
+              enemy.setAttribute('data-health', health.toString());
+              createHitMarker(enemyCenterX, enemyCenterY);
+            } else {
+              createExplosion(enemyCenterX, enemyCenterY);
+              removeEnemy(enemy);
+            }
+          } else {
+            createExplosion(enemyCenterX, enemyCenterY);
+            removeEnemy(enemy);
+          }
+          
+          bullet.remove();
+          bullets.splice(i, 1);
+          break;
+        }
+      }
+
+      // Remove bullets that are off screen
+      if (
+        parseFloat(bullet.style.left) < 0 ||
+        parseFloat(bullet.style.left) > gameContainer.offsetWidth ||
+        parseFloat(bullet.style.top) < 0 ||
+        parseFloat(bullet.style.top) > gameContainer.offsetHeight
+      ) {
+        bullet.remove();
+        bullets.splice(i, 1);
+      }
+    }
+  }
+
+  function updateEnemyBullets() {
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+      const bullet = enemyBullets[i];
+      const bulletRect = bullet.getBoundingClientRect();
+      const oldX = bulletRect.left;
+      const oldY = bulletRect.top;
+      
+      // Move bullet
+      bullet.style.left = `${bulletRect.left + bullet.velocityX}px`;
+      bullet.style.top = `${bulletRect.top + bullet.velocityY}px`;
+      const newBulletRect = bullet.getBoundingClientRect();
+      
+      // Check collision with player
+      const playerRect = player.getBoundingClientRect();
+      if (checkCollision(newBulletRect, playerRect)) {
+        bullet.remove();
+        enemyBullets.splice(i, 1);
+        reduceHealth();
+        continue;
+      }
+
+      // Check collision with turret connections
+      let hitConnection = false;
+      for (const connection of turretConnections) {
+        const connRect = connection.getBoundingClientRect();
+        const angle = parseFloat(connection.style.transform.replace('rotate(', '').replace('rad)', ''));
+        const startX = parseFloat(connection.style.left);
+        const startY = parseFloat(connection.style.top);
+        const endX = startX + Math.cos(angle) * parseFloat(connection.style.width);
+        const endY = startY + Math.sin(angle) * parseFloat(connection.style.width);
+
+        if (lineIntersectsRect(startX, startY, endX, endY, newBulletRect)) {
+          bullet.remove();
+          enemyBullets.splice(i, 1);
+          hitConnection = true;
+          
+          // Create a small particle effect
+          const particleCount = 3;
+          for (let j = 0; j < particleCount; j++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = `${newBulletRect.left + newBulletRect.width / 2}px`;
+            particle.style.top = `${newBulletRect.top + newBulletRect.height / 2}px`;
+            particle.style.backgroundColor = '#4a90e2';
+            gameContainer.appendChild(particle);
+            
+            // Remove particle after animation
+            setTimeout(() => particle.remove(), 300);
+          }
+          break;
+        }
+      }
+      if (hitConnection) continue;
+
+      // Check collision with turrets
+      let hitTurret = false;
+      for (let j = turrets.length - 1; j >= 0; j--) {
+        const turret = turrets[j];
+        const turretRect = turret.getBoundingClientRect();
+        if (checkCollision(newBulletRect, turretRect)) {
+          bullet.remove();
+          enemyBullets.splice(i, 1);
+          turret.health -= 10;
+          
+          const healthFill = turret.querySelector('.health-fill');
+          const healthPercentage = (turret.health / turretMaxHealth) * 100;
+          healthFill.style.width = `${healthPercentage}%`;
+          
+          if (turret.health <= 0) {
+            turret.remove();
+            turrets.splice(j, 1);
+          }
+          
+          hitTurret = true;
+          break;
+        }
+      }
+      if (hitTurret) continue;
+
+      // Remove bullet if it's out of bounds
+      if (
+        newBulletRect.left < 0 ||
+        newBulletRect.right > gameContainer.offsetWidth ||
+        newBulletRect.top < 0 ||
+        newBulletRect.bottom > gameContainer.offsetHeight
+      ) {
+        bullet.remove();
+        enemyBullets.splice(i, 1);
+      }
+    }
+  }
+
+  function updateTurretBullets() {
+    for (let i = turretBullets.length - 1; i >= 0; i--) {
+      const bullet = turretBullets[i];
+      const bulletX = parseFloat(bullet.style.left);
+      const bulletY = parseFloat(bullet.style.top);
+      const bulletRect = bullet.getBoundingClientRect();
+
+      // Move bullet
+      bullet.style.left = `${bulletX + bullet.velocityX}px`;
+      bullet.style.top = `${bulletY + bullet.velocityY}px`;
+
+      // Check for collisions with enemies
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const enemy = enemies[j];
+        const enemyRect = enemy.getBoundingClientRect();
+
+        if (checkCollision(bulletRect, enemyRect)) {
+          const enemyCenterX = enemyRect.left + enemyRect.width / 2;
+          const enemyCenterY = enemyRect.top + enemyRect.height / 2;
+          createHitMarker(enemyCenterX, enemyCenterY);
+
+          if (enemy.classList.contains('enemy-pentagon')) {
+            const health = parseInt(enemy.getAttribute('data-health')) - 1;
+            if (health > 0) {
+              enemy.setAttribute('data-health', health.toString());
+              createHitMarker(enemyCenterX, enemyCenterY);
+            } else {
+              createExplosion(enemyCenterX, enemyCenterY);
+              removeEnemy(enemy);
+            }
+          } else {
+            createExplosion(enemyCenterX, enemyCenterY);
+            removeEnemy(enemy);
+          }
+          
+          bullet.remove();
+          turretBullets.splice(i, 1);
+          break;
+        }
+      }
+
+      // Remove bullets that are off screen
+      if (
+        bulletX < 0 ||
+        bulletX > gameContainer.offsetWidth ||
+        bulletY < 0 ||
+        bulletY > gameContainer.offsetHeight
+      ) {
+        bullet.remove();
+        turretBullets.splice(i, 1);
+      }
+    }
+  }
+
+  function updatePlayerPosition() {
+    if (keys['w'] || keys['ArrowUp']) playerY = Math.max(0, playerY - 5);
+    if (keys['s'] || keys['ArrowDown']) playerY = Math.min(gameContainer.offsetHeight - player.offsetHeight, playerY + 5);
+    if (keys['a'] || keys['ArrowLeft']) playerX = Math.max(0, playerX - 5);
+    if (keys['d'] || keys['ArrowRight']) playerX = Math.min(gameContainer.offsetWidth - player.offsetWidth, playerX + 5);
+
+    player.style.left = `${playerX}px`;
+    player.style.top = `${playerY}px`;
+
+    // Update reload indicator position when player moves
+    if (isReloading) {
+      const reloadIndicator = document.getElementById('reload-indicator');
+      reloadIndicator.style.left = `${playerX}px`;
+      reloadIndicator.style.top = `${playerY}px`;
+    }
+  }
+
+  function updateEnemyPositions() {
+    enemies.forEach(enemy => {
+      const enemyX = parseFloat(enemy.style.left);
+      const enemyY = parseFloat(enemy.style.top);
+      const playerRect = player.getBoundingClientRect();
+      const enemyRect = enemy.getBoundingClientRect();
+
+      let deltaX = playerRect.left + playerRect.width / 2 - (enemyRect.left + enemyRect.width / 2);
+      let deltaY = playerRect.top + playerRect.height / 2 - (enemyRect.top + enemyRect.height / 2);
+
+      const angle = Math.atan2(deltaY, deltaX);
+      const speed = enemy.classList.contains('enemy-pentagon') ? pentagonSpeed : triangleSpeed;
+
+      enemy.style.left = `${enemyX + Math.cos(angle) * speed}px`;
+      enemy.style.top = `${enemyY + Math.sin(angle) * speed}px`;
+
+      // Make pentagons shoot at player
+      if (enemy.classList.contains('enemy-pentagon')) {
+        if (!enemy.lastShot || Date.now() - enemy.lastShot >= enemyShootInterval) {
+          createEnemyBullet(enemy, playerRect.left + playerRect.width / 2, playerRect.top + playerRect.height / 2);
+          enemy.lastShot = Date.now();
+        }
+      }
+
+      if (checkCollision(playerRect, enemyRect)) {
+        reduceHealth();
+        const enemyCenterX = enemyRect.left + enemyRect.width / 2;
+        const enemyCenterY = enemyRect.top + enemyRect.height / 2;
+        createExplosion(enemyCenterX, enemyCenterY);
+        removeEnemy(enemy);
+      }
+    });
+  }
+
+  function updateEnergyPellets() {
+    const playerRect = player.getBoundingClientRect();
+    
+    for (let i = energyPellets.length - 1; i >= 0; i--) {
+      const pellet = energyPellets[i];
+      const pelletRect = pellet.getBoundingClientRect();
+      const pelletX = pelletRect.left + pelletRect.width / 2;
+      const pelletY = pelletRect.top + pelletRect.height / 2;
+
+      // Calculate distance to player
+      const dx = playerRect.left + playerRect.width / 2 - pelletX;
+      const dy = playerRect.top + playerRect.height / 2 - pelletY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Check for collection
+      if (distance < 20) { // Collection radius
+        // Only collect if not at max
+        if (collectedPellets < maxPellets) {
+          collectedPellets++;
+          updateEnergyBar();
+        }
+        pellet.remove();
+        energyPellets.splice(i, 1);
+        continue;
+      }
+
+      // Move towards player if within attraction range
+      if (distance < pelletAttractionRange) {
+        const angle = Math.atan2(dy, dx);
+        const speed = pelletSpeed * (1 - distance / pelletAttractionRange);
+        
+        const newX = pelletX + Math.cos(angle) * speed;
+        const newY = pelletY + Math.sin(angle) * speed;
+        
+        pellet.style.left = `${newX - pelletRect.width / 2}px`;
+        pellet.style.top = `${newY - pelletRect.height / 2}px`;
+      }
+    }
+  }
+
+  function updateTurrets() {
+    const currentTime = Date.now();
+    
+    turrets.forEach(turret => {
+      const turretRect = turret.getBoundingClientRect();
+      const turretX = turretRect.left + turretRect.width / 2;
+      const turretY = turretRect.top + turretRect.height / 2;
+
+      // Find closest enemy in range
+      let closestEnemy = null;
+      let closestDistance = turretRange;
+
+      enemies.forEach(enemy => {
+        const enemyRect = enemy.getBoundingClientRect();
+        const enemyX = enemyRect.left + enemyRect.width / 2;
+        const enemyY = enemyRect.top + enemyRect.height / 2;
+
+        const dx = enemyX - turretX;
+        const dy = enemyY - turretY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestEnemy = enemy;
+        }
+      });
+
+      // Get boosted fire rate based on nearby turrets
+      const currentFireRate = getTurretFireRate(turret);
+
+      // Shoot at closest enemy if enough time has passed
+      if (closestEnemy && currentTime - turret.lastShot >= currentFireRate) {
+        createTurretBullet(turret, closestEnemy);
+        turret.lastShot = currentTime;
+      }
+    });
+  }
+
+  function updateTurretConnections() {
+    const currentTime = Date.now();
+    
+    // Remove old connections
+    turretConnections.forEach(conn => conn.remove());
+    turretConnections.length = 0;
+
+    // Find synergized turret groups
+    const synergizedGroups = [];
+    turrets.forEach((turret1, i) => {
+      const group = new Set([turret1]);
+      const t1Rect = turret1.getBoundingClientRect();
+      const t1X = t1Rect.left + t1Rect.width/2;
+      const t1Y = t1Rect.top + t1Rect.height/2;
+      
+      turrets.forEach((turret2, j) => {
+        if (i !== j) {
+          const t2Rect = turret2.getBoundingClientRect();
+          const t2X = t2Rect.left + t2Rect.width/2;
+          const t2Y = t2Rect.top + t2Rect.height/2;
+          
+          const dx = t2X - t1X;
+          const dy = t2Y - t1Y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance <= turretSynergyRange) {
+            group.add(turret2);
+            
+            // Create connection line
+            const connection = document.createElement('div');
+            connection.className = 'turret-connection';
+            connection.style.width = `${distance}px`;
+            connection.style.left = `${t1X}px`;
+            connection.style.top = `${t1Y}px`;
+            connection.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+            gameContainer.appendChild(connection);
+            turretConnections.push(connection);
+          }
+        }
+      });
+      
+      if (group.size === 3) { // Only create groups of exactly 3
+        synergizedGroups.push(Array.from(group));
+      }
+    });
+
+    // Heal turrets in synergized groups every 2 seconds
+    if (currentTime - lastTurretHealTime >= turretHealInterval) {
+      synergizedGroups.forEach(group => {
+        group.forEach(turret => {
+          if (turret.health < turretMaxHealth) {
+            turret.health = Math.min(turretMaxHealth, turret.health + turretHealAmount);
+            const healthFill = turret.querySelector('.health-fill');
+            const healthPercentage = (turret.health / turretMaxHealth) * 100;
+            healthFill.style.width = `${healthPercentage}%`;
+          }
+        });
+      });
+      lastTurretHealTime = currentTime;
+    }
+  }
+
+  function checkHealthPackCollection() {
+    const playerRect = player.getBoundingClientRect();
+    
+    for (let i = healthPacks.length - 1; i >= 0; i--) {
+      const pack = healthPacks[i];
+      const packRect = pack.getBoundingClientRect();
+      
+      if (checkCollision(playerRect, packRect)) {
+        currentHealth = Math.min(initialHealth, currentHealth + healthPackHealAmount);
+        updateHealthBar();
+        pack.remove();
+        healthPacks.splice(i, 1);
+      }
+    }
+  }
+
+  function getTurretFireRate(turret) {
+    const turretRect = turret.getBoundingClientRect();
+    const turretX = turretRect.left + turretRect.width / 2;
+    const turretY = turretRect.top + turretRect.height / 2;
+    let nearbyTurrets = 0;
+
+    // Check for nearby turrets
+    turrets.forEach(otherTurret => {
+      if (otherTurret !== turret) {
+        const otherRect = otherTurret.getBoundingClientRect();
+        const otherX = otherRect.left + otherRect.width / 2;
+        const otherY = otherRect.top + otherRect.height / 2;
+
+        const dx = otherX - turretX;
+        const dy = otherY - turretY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance <= turretSynergyRange) {
+          nearbyTurrets++;
+        }
+      }
+    });
+
+    // Cap synergy at 3 turrets (including this one)
+    nearbyTurrets = Math.min(nearbyTurrets, 2); // Cap at 2 nearby turrets (3 total with current turret)
+    const fireRateMultiplier = Math.pow(turretFireRateBoost, nearbyTurrets);
+    return turretFireRate * fireRateMultiplier;
+  }
+
+  function createEnergyCard() {
+    const card = document.createElement('div');
+    card.className = 'energy-card';
+    cardCount++;
+    card.setAttribute('data-number', cardCount);
+    cardsContainer.appendChild(card);
+  }
+
+  function updateEnergyBar() {
+    energyBar.style.width = `${(collectedPellets / maxPellets) * 100}%`;
+    
+    // When energy bar is full
+    if (collectedPellets >= maxPellets) {
+      createEnergyCard();
+      collectedPellets = 0;
+      energyBar.style.width = '0%';
+    }
+  }
+
+  function checkCollision(rect1, rect2) {
+    return (
+      rect1.left < rect2.right &&
+      rect1.right > rect2.left &&
+      rect1.top < rect2.bottom &&
+      rect1.bottom > rect2.top
+    );
+  }
+
+  function reduceHealth() {
+    currentHealth -= damagePerHit;
+    currentHealth = Math.max(0, currentHealth);
+    updateHealthBar();
+
+    if (currentHealth <= 0) {
+      alert("Game Over! You ran out of health.");
+      resetGame();
+    }
+  }
+
+  function updateHealthBar() {
+    const healthPercentage = (currentHealth / initialHealth) * 100;
+    healthBar.style.width = `${healthPercentage}%`;
+    healthBar.className = ''; // Reset class
+    if (healthPercentage < 30) {
+      healthBar.classList.add('critical');
+    } else if (healthPercentage < 60) {
+      healthBar.classList.add('low');
+    }
+  }
+
+  function updateAmmoDisplay() {
+    ammoCountDisplay.textContent = `Ammo: ${currentAmmo}`;
+  }
+
+  function startReload() {
+    if (!isReloading && currentAmmo < maxAmmo) {
+      isReloading = true;
+      const reloadIndicator = document.getElementById('reload-indicator');
+      reloadIndicator.style.display = 'block';
+      reloadIndicator.style.left = `${playerX}px`;
+      reloadIndicator.style.top = `${playerY}px`;
+      
+      setTimeout(() => {
+        currentAmmo = maxAmmo;
+        isReloading = false;
+        updateAmmoDisplay();
+        reloadIndicator.style.display = 'none';
+      }, 2000);
+    }
+  }
+
+  function gameLoop() {
+    if (!gameStarted) return;
+    updatePlayerPosition();
+    updateEnemyPositions();
+    updateBullets();
+    updateEnemyBullets();
+    updateTurretBullets();
+    updateEnergyPellets();
+    updateTurrets();
+    updateTurretConnections();
+    checkHealthPackCollection();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function lineIntersectsRect(x1, y1, x2, y2, rect) {
+    // Check if line intersects with rectangle using line segment intersection
+    const left = rect.left;
+    const right = rect.right;
+    const top = rect.top;
+    const bottom = rect.bottom;
+
+    // Check each edge of the rectangle
+    if (lineIntersectsLine(x1, y1, x2, y2, left, top, right, top) ||    // Top edge
+        lineIntersectsLine(x1, y1, x2, y2, right, top, right, bottom) || // Right edge
+        lineIntersectsLine(x1, y1, x2, y2, left, bottom, right, bottom) ||  // Bottom edge
+        lineIntersectsLine(x1, y1, x2, y2, left, top, left, bottom)) {   // Left edge
+        return true;
+    }
+    return false;
+  }
+
+  function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+    // Calculate denominator
+    const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (den === 0) return false;
+
+    // Calculate intersection point
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+
+    // Check if intersection point lies on both line segments
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (gameStarted) {
+      keys[event.key] = true;
+    }
+  });
+
+  document.addEventListener('keyup', (event) => {
+    if (gameStarted) {
+      keys[event.key] = false;
+    }
+  });
+
+  gameContainer.addEventListener('mousemove', (event) => {
+    mouseX = event.clientX;
+    mouseY = event.clientY;
+  });
+
+  gameContainer.addEventListener('click', () => {
+    createBullet(player.offsetLeft + player.offsetWidth / 2, player.offsetTop + player.offsetHeight / 2, mouseX, mouseY);
+  });
+
+  gameContainer.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+
+  gameContainer.addEventListener('mousedown', (e) => {
+    if (!gameStarted) return;
+    
+    if (e.button === 2) { // Right click
+      if (cardCount > 0) {
+        const rect = gameContainer.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        createTurret(x, y);
+      }
+    }
+  });
+
+  startButton.addEventListener('click', () => {
+    const titleScreen = document.getElementById('title-screen');
+    const rulesBox = document.getElementById('rules-box');
+    titleScreen.style.display = 'none';
+    rulesBox.style.display = 'none';
+    gameStarted = true;
+    playerX = gameContainer.offsetWidth / 2 - 16;
+    playerY = gameContainer.offsetHeight / 2 - 16;
+    player.style.left = `${playerX}px`;
+    player.style.top = `${playerY}px`;
+    currentHealth = initialHealth;
+    updateHealthBar();
+    numEnemies = initialNumEnemies;
+    enemies.forEach(enemy => enemy.remove());
+    enemies.length = 0;
+    bullets.forEach(bullet => bullet.remove());
+    bullets.length = 0;
+    enemyBullets.forEach(bullet => bullet.remove());
+    enemyBullets.length = 0;
+    energyPellets.forEach(pellet => pellet.remove());
+    energyPellets.length = 0;
+    currentAmmo = maxAmmo;
+    updateAmmoDisplay();
+    isReloading = false;
+
+    for (let i = 0; i < numEnemies; i++) {
+      createEnemy();
+    }
+
+    gameLoop();
+  });
+
+  window.addEventListener('resize', () => {
+    if (gameStarted) {
+      playerX = Math.max(0, Math.min(playerX, gameContainer.offsetWidth - player.offsetWidth));
+      playerY = Math.max(0, Math.min(playerY, gameContainer.offsetHeight - player.offsetHeight));
+      player.style.left = `${playerX}px`;
+      player.style.top = `${playerY}px`;
+    }
+  });
+
+  function resetGame() {
+    gameStarted = false;
+    currentHealth = initialHealth;
+    collectedPellets = 0;
+    cardCount = 0;
+    numEnemies = initialNumEnemies;
+    enemyHealthMultiplier = 1;
+    lastHealthPackTime = 0;
+    lastTurretHealTime = 0;
+    updateHealthBar();
+    updateEnergyBar();
+    enemies.forEach(enemy => enemy.remove());
+    enemies.length = 0;
+    bullets.forEach(bullet => bullet.remove());
+    bullets.length = 0;
+    enemyBullets.forEach(bullet => bullet.remove());
+    enemyBullets.length = 0;
+    energyPellets.forEach(pellet => pellet.remove());
+    energyPellets.length = 0;
+    turrets.forEach(turret => turret.remove());
+    turrets.length = 0;
+    turretBullets.forEach(bullet => bullet.remove());
+    turretBullets.length = 0;
+    turretConnections.forEach(conn => conn.remove());
+    turretConnections.length = 0;
+    healthPacks.forEach(pack => pack.remove());
+    healthPacks.length = 0;
+    cardsContainer.innerHTML = '';
+    gameContainer.style.display = 'none';
+    titleScreen.style.display = 'flex';
+    currentAmmo = maxAmmo;
+    isReloading = false;
+  }
+</script>
+
+</body>
+</html>
